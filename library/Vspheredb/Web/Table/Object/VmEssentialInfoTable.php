@@ -13,6 +13,7 @@ use Icinga\Module\Vspheredb\Addon\IbmSpectrumProtect;
 use Icinga\Module\Vspheredb\Addon\SimpleBackupTool;
 use Icinga\Module\Vspheredb\Addon\NetBackup;
 use Icinga\Module\Vspheredb\Addon\VeeamBackup;
+use Icinga\Module\Vspheredb\Addon\NetworkerBackup;
 use Icinga\Module\Vspheredb\Addon\VRangerBackup;
 use Icinga\Module\Vspheredb\DbObject\MonitoringConnection;
 use Icinga\Module\Vspheredb\DbObject\VCenter;
@@ -61,6 +62,7 @@ class VmEssentialInfoTable extends NameValueTable
             new IbmSpectrumProtect(),
             new NetBackup(),
             new VeeamBackup(),
+            new NetworkerBackup(),
             new VRangerBackup(),
         ];
         foreach ($tools as $tool) {
