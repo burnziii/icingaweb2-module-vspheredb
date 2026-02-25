@@ -3,6 +3,7 @@
 namespace Icinga\Module\Vspheredb\Polling;
 
 use InvalidArgumentException;
+
 use function in_array;
 use function is_int;
 use function preg_match;
@@ -13,7 +14,7 @@ use function preg_match;
 class CurlOptions
 {
     /** @var array */
-    const PROXY_TYPES = [
+    public const PROXY_TYPES = [
         'HTTP'   => CURLPROXY_HTTP,
         'SOCKS5' => CURLPROXY_SOCKS5,
     ];
@@ -32,7 +33,7 @@ class CurlOptions
                 // Host header disabled for now, see #496
                 // "Host: $host",
                 'Expect:',
-                'User-Agent: Icinga-vSphereDB/1.6',
+                'User-Agent: Icinga-vSphereDB/1.8',
             ]
         ];
 

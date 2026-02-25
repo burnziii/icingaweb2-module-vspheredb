@@ -91,10 +91,12 @@ class ConfigurationController extends Controller
             $connections = $this->mapServerConnectionsToId($this->syncRpcCall('vsphere.getApiConnections'));
             foreach ($connections as $conns) {
                 foreach ($conns as $conn) {
-                    if (in_array($conn->state, [
+                    if (
+                        in_array($conn->state, [
                         ApiConnection::STATE_INIT,
                         ApiConnection::STATE_LOGIN,
-                    ])) {
+                        ])
+                    ) {
                         $this->setAutorefreshInterval(5);
                     }
                 }
@@ -140,7 +142,7 @@ class ConfigurationController extends Controller
         $this->tabs(new ConfigTabs($this->db()))->activate('monitoring');
         $this->actions()->add(Link::create(
             $this->translate('Add'),
-            'vspheredb/configuration/addmonitoring',
+            'vspheredb/configuration/monitoringconfig',
             null,
             [
                 'class'            => 'icon-plus',
@@ -162,33 +164,28 @@ class ConfigurationController extends Controller
         }
     }
 
-    public function addmonitoringAction()
-    {
-        $this->addSingleTab($this->translate('Create'));
-        $this->addTitle($this->translate('New Monitoring Integration'));
-        $form = new MonitoringConnectionForm($this->db());
-        $form->handleRequest($this->getServerRequest());
-        $this->content()->add($form);
-    }
-
     public function monitoringconfigAction()
     {
         $id = $this->params->get('id');
         if ($id) {
+            $this->addTitle($this->translate('Monitoring Integration'));
             $this->addSingleTab($this->translate('Modify'));
-
             $db = $this->db()->getDbAdapter();
             $res = $db->fetchRow(
                 $db->select()->from('monitoring_connection')->where('id = ?', $id)
             );
         } else {
+            $this->addTitle($this->translate('New Monitoring Integration'));
             $this->addSingleTab($this->translate('Create'));
             $res = null;
         }
 
-
-        $this->addTitle($this->translate('Monitoring Integration'));
         $form = new MonitoringConnectionForm($this->db());
+        $form->on(MonitoringConnectionForm::ON_SUCCESS, function (MonitoringConnectionForm $form) {
+            // TODO: created, modified, nothing, %s
+            // $this->getViewRenderer()->disable();
+            $this->redirectNow($this->url()->with('id', $form->getId()));
+        });
         if ($res) {
             if ($res->vcenter_uuid !== null) {
                 $res->vcenter = Uuid::fromBytes($res->vcenter_uuid)->toString();
@@ -196,6 +193,9 @@ class ConfigurationController extends Controller
             $form->populate((array) $res);
         }
         $form->handleRequest($this->getServerRequest());
+        if ($form->hasBeenDeleted()) {
+            $this->redirectNow('vspheredb/configuration/monitoring#__CLOSE__');
+        }
         $this->content()->add($form);
     }
 }

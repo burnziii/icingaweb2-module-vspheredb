@@ -27,6 +27,7 @@ use Icinga\Module\Vspheredb\DbObject\VCenterServer;
 use Icinga\Module\Vspheredb\MappedClass\AboutInfo;
 use Icinga\Module\Vspheredb\Polling\ApiConnection;
 use Icinga\Module\Vspheredb\Polling\ApiConnectionHandler;
+use Icinga\Module\Vspheredb\Polling\RestApi;
 use Icinga\Module\Vspheredb\Polling\ServerInfo;
 use Icinga\Module\Vspheredb\Polling\ServerSet;
 use Icinga\Module\Vspheredb\Util;
@@ -38,6 +39,7 @@ use Ramsey\Uuid\UuidInterface;
 use React\EventLoop\LoopInterface;
 use React\Stream\Util as StreamUtil;
 use RuntimeException;
+
 use function React\Promise\resolve;
 
 class VsphereDbDaemon implements DaemonTask, SystemdAwareTask, LoggerAwareInterface, EventEmitterInterface
@@ -45,18 +47,18 @@ class VsphereDbDaemon implements DaemonTask, SystemdAwareTask, LoggerAwareInterf
     use EventEmitterTrait;
     use LoggerAwareTrait;
 
-    const PROCESS_NAME = 'Icinga::vSphereDB';
+    public const PROCESS_NAME = 'Icinga::vSphereDB';
 
-    const COMPONENT_DB = 'db';
-    const COMPONENT_LOCALDB = 'localdb';
-    const COMPONENT_API = 'api';
+    public const COMPONENT_DB = 'db';
+    public const COMPONENT_LOCALDB = 'localdb';
+    public const COMPONENT_API = 'api';
 
-    const STATE_STOPPED  = 'stopped';
-    const STATE_STOPPING  = 'stopping';
-    const STATE_STARTING = 'starting';
-    const STATE_READY    = 'ready';
-    const STATE_FAILED   = 'failed';
-    const STATE_IDLE     = 'idle';
+    public const STATE_STOPPED  = 'stopped';
+    public const STATE_STOPPING  = 'stopping';
+    public const STATE_STARTING = 'starting';
+    public const STATE_READY    = 'ready';
+    public const STATE_FAILED   = 'failed';
+    public const STATE_IDLE     = 'idle';
 
     /** @var LoopInterface */
     private $loop;
@@ -74,9 +76,6 @@ class VsphereDbDaemon implements DaemonTask, SystemdAwareTask, LoggerAwareInterf
 
     /** @var NotifySystemD|boolean */
     protected $systemd;
-
-    /** @var Logger */
-    protected $logger;
 
     /** @var DbLogger */
     protected $dbLogger;
@@ -237,6 +236,7 @@ class VsphereDbDaemon implements DaemonTask, SystemdAwareTask, LoggerAwareInterf
                 case self::STATE_FAILED:
                     $this->logger->error('[api] failed');
                     // Intentional fall-through:
+                    // no break
                 case self::STATE_STOPPING:
                     if ($this->apiConnectionHandler) {
                         $this->apiConnectionHandler->stop();
@@ -256,7 +256,7 @@ class VsphereDbDaemon implements DaemonTask, SystemdAwareTask, LoggerAwareInterf
             $this->daemonState->setState(self::STATE_IDLE);
         }
     }
-    
+
     protected function setDbState($state)
     {
         $this->daemonState->setComponentState(self::COMPONENT_DB, $state);
@@ -353,7 +353,7 @@ class VsphereDbDaemon implements DaemonTask, SystemdAwareTask, LoggerAwareInterf
 
     protected function initializeDbLogger(LoggerInterface $logger)
     {
-// TODO: ProcessInfo!
+        // TODO: ProcessInfo!
         $this->dbLogger = new DbLogger(
             $this->processInfo->instance_uuid,
             $this->processInfo->fqdn,
@@ -403,8 +403,9 @@ class VsphereDbDaemon implements DaemonTask, SystemdAwareTask, LoggerAwareInterf
         $logger->info('connection is ready');
 
         try {
+            $restApi = new RestApi($serverInfo, $vCenter, $this->curl, $logger);
             $this->launchTasksForConnection($connection, [
-                new ObjectSync($vCenter, $connection->getApi(), $this->dbRunner, $logger),
+                new ObjectSync($vCenter, $connection->getApi(), $restApi, $this->dbRunner, $logger),
                 new PerfDataSync($vCenter, $connection->getApi(), $this->curl, $this->loop, $logger),
             ]);
         } catch (Exception $e) {
@@ -633,7 +634,7 @@ class VsphereDbDaemon implements DaemonTask, SystemdAwareTask, LoggerAwareInterf
         }, function (Exception $e) {
             $this->logger->error('[configwatch] Sending DB Config failed: ' . $e->getMessage());
             $this->setDbState(self::STATE_FAILED);
-        })->done();
+        });
     }
 
     protected function stopConfigWatch()

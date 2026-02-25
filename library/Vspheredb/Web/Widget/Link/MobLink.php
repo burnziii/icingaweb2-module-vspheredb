@@ -10,6 +10,7 @@ use Icinga\Module\Vspheredb\DbObject\VCenter;
 use Icinga\Module\Vspheredb\DbObject\VCenterServer;
 use ipl\Html\Html;
 use ipl\Html\HtmlDocument;
+
 use function rawurlencode;
 use function sprintf;
 
@@ -23,7 +24,7 @@ class MobLink extends HtmlDocument
 
     protected $moRef;
 
-    public function __construct(VCenter $vCenter, BaseDbObject $object = null, $label = null)
+    public function __construct(VCenter $vCenter, ?BaseDbObject $object = null, $label = null)
     {
         $this->vCenter = $vCenter;
         if ($object) {

@@ -6,11 +6,11 @@ use Icinga\Module\Vspheredb\MappedClass\SelectionSpec;
 
 class FullSelectSet implements SelectSet
 {
-    const TRAVERSE_CR1 = 'TraverseCR1';
-    const TRAVERSE_CR2 = 'TraverseCR2';
-    const TRAVERSE_RP1 = 'TraverseRP1';
-    const TRAVERSE_RP2 = 'TraverseRP2';
-    const TRAVERSE_STORAGE_POD = 'TraverseStoragePod';
+    public const TRAVERSE_CR1 = 'TraverseCR1';
+    public const TRAVERSE_CR2 = 'TraverseCR2';
+    public const TRAVERSE_RP1 = 'TraverseRP1';
+    public const TRAVERSE_RP2 = 'TraverseRP2';
+    public const TRAVERSE_STORAGE_POD = 'TraverseStoragePod';
 
     /**
      * @return SelectionSpec[]
@@ -32,7 +32,7 @@ class FullSelectSet implements SelectSet
                 self::TRAVERSE_STORAGE_POD,
             ]),
             GenericSpec::traverse(self::TRAVERSE_STORAGE_POD, 'StoragePod', 'childEntity'),
-            GenericSpec::traverse(self::TRAVERSE_CR1, 'Folder', 'childEntity', [
+            GenericSpec::traverse(self::TRAVERSE_CR1, 'ComputeResource', 'resourcePool', [
                 // A ComputeResource object can be followed either by a ResourcePool
                 // or a HostSystem. There is no need to traverse a HostSystem, but
                 // there are two different ResourcePool TraversalSpecs to cover, so

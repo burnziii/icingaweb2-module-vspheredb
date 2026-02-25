@@ -8,6 +8,7 @@ use Icinga\Application\ApplicationBootstrap;
 use Icinga\Application\Icinga;
 use Icinga\Authentication\Auth;
 use ipl\Html\Html;
+
 use function preg_replace;
 use function rawurlencode;
 
@@ -16,14 +17,16 @@ class Documentation
 {
     use TranslationHelper;
 
-    /** @var ApplicationBootstrap */
-    protected $app;
+    protected const PUBLIC_URL_MAP = [
+        'vspheredb' => 'icinga-vsphere-integration',
+        'director'  => 'icinga-director',
+    ];
 
-    /** @var Auth */
-    protected $auth;
+    protected ApplicationBootstrap $app;
+    protected Auth $auth;
 
-    /** @var bool true links to GitHub, false to icinga.com */
-    protected $linkToGitHub = false;
+    // true links to GitHub, false to icinga.com
+    protected bool $linkToGitHub = false;
 
     public function __construct(ApplicationBootstrap $app, Auth $auth)
     {
@@ -58,16 +61,19 @@ class Documentation
             );
         }
 
-        $baseParams['target'] = '_blank';
-        if ($this->linkToGitHub) {
+        $baseParams = [
+            'target' => '_blank',
+            'rel'    => 'noreferrer',
+        ];
+        if ($this->linkToGitHub || ! isset(self::PUBLIC_URL_MAP[$module])) {
             return Html::tag('a', [
-                'href' => $this->githubDocumentationUrl($module, $chapter),
-            ] + $baseParams, $label);
+                    'href' => $this->githubDocumentationUrl($module, $chapter),
+                ] + $baseParams, $label);
         }
 
         return Html::tag('a', [
-            'href' => $this->icingaDocumentationUrl($module, $chapter),
-        ] + $baseParams, $label);
+                'href' => $this->icingaDocumentationUrl(self::PUBLIC_URL_MAP[$module], $chapter),
+            ] + $baseParams, $label);
     }
 
     protected function getModuleDocumentationUrl($moduleName, $chapter): string

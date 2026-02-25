@@ -8,6 +8,7 @@ use Icinga\Data\ConfigObject;
 use Icinga\Module\Vspheredb\Application\MemoryLimit;
 use Icinga\Module\Vspheredb\Daemon\DbCleanup;
 use Icinga\Module\Vspheredb\Db;
+use Icinga\Module\Vspheredb\Db\VCenterCleanup;
 use Icinga\Module\Vspheredb\DbObject\VCenter;
 use Icinga\Module\Vspheredb\Monitoring\PersistedRuleProblems;
 use Icinga\Module\Vspheredb\Polling\SyncStore\ObjectSyncStore;
@@ -17,8 +18,9 @@ use Icinga\Module\Vspheredb\SyncRelated\SyncStats;
 use Psr\Log\LoggerInterface;
 use React\EventLoop\LoopInterface;
 use React\Promise\Deferred;
-use React\Promise\ExtendedPromiseInterface;
+use React\Promise\PromiseInterface;
 use RuntimeException;
+
 use function React\Promise\reject;
 use function React\Promise\resolve;
 
@@ -34,6 +36,9 @@ class DbRunner
     protected $connection;
 
     protected $db;
+
+    /** @var ?DbCleanup */
+    protected $runningVcenterDeletion = null;
 
     /** @var LoopInterface */
     protected $loop;
@@ -72,7 +77,7 @@ class DbRunner
 
     /**
      * @param object $config
-     * @return ExtendedPromiseInterface
+     * @return PromiseInterface
      * @throws Exception
      */
     public function setDbConfigRequest($config)
@@ -93,7 +98,7 @@ class DbRunner
                         Process::setTitle('Icinga::vSphereDB::DB::failing');
                         $deferred->reject($e);
                     }
-                    $deferred->resolve();
+                    $deferred->resolve(null);
                 }, function (Exception $e) use ($deferred) {
                     $deferred->reject($e);
                 });
@@ -230,6 +235,35 @@ class DbRunner
     }
 
     /**
+     * @param int $vCenterId
+     * @return bool
+     */
+    public function deleteVcenterRequest($vCenterId)
+    {
+        $this->logger->notice('Got db.deleteVcenter for id=' . $vCenterId);
+        if ($this->connection === null) {
+            throw new RuntimeException('Unable to remove vCenter, have no DB connection');
+        }
+        if ($this->runningVcenterDeletion !== null) {
+            throw new RuntimeException(
+                'Unable to remove vCenter, a cleanup is in progress'
+            );
+        }
+
+        Process::setTitle('Icinga::vSphereDB::DB::deleteVcenter ' . $vCenterId);
+        $this->runningVcenterDeletion = new VCenterCleanup($this->connection, $vCenterId);
+        $this->runningVcenterDeletion->run()->then(function () {
+            $this->runningVcenterDeletion = null;
+            $this->setProcessReadyTitle();
+        }, function (Exception $e) {
+            $this->runningVcenterDeletion = null;
+            $this->logger->error('db.deleteVcenter: ' . $e->getMessage());
+        });
+
+        return true;
+    }
+
+    /**
      * @param $vCenterId
      * @param $class
      * @return SyncStore
@@ -323,7 +357,7 @@ class DbRunner
                     $deferred->reject($e);
                 }
                 $this->logger->notice('DB schema is ready');
-                $deferred->resolve();
+                $deferred->resolve(null);
             });
         } else {
             return resolve();

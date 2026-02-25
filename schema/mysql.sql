@@ -164,6 +164,7 @@ CREATE TABLE object (
   UNIQUE KEY vcenter_moref (vcenter_uuid, moref),
   INDEX object_type (object_type),
   INDEX object_name (object_name(64)),
+  INDEX vcenter_uuid (vcenter_uuid),
   CONSTRAINT object_parent
     FOREIGN KEY parent (parent_uuid)
     REFERENCES object (uuid)
@@ -230,6 +231,8 @@ CREATE TABLE host_system (
     'uninitialized'
   ) DEFAULT NULL,
   custom_values TEXT DEFAULT NULL,
+  INDEX host_name (host_name),
+  INDEX vcenter_uuid (vcenter_uuid),
   PRIMARY KEY(uuid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin;
 
@@ -248,7 +251,8 @@ CREATE TABLE host_pci_device (
   vendor_name VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   sub_vendor_id SMALLINT NOT NULL, -- short
   parent_bridge VARCHAR(64) DEFAULT NULL,
-  PRIMARY KEY(host_uuid, id)
+  PRIMARY KEY(host_uuid, id),
+  INDEX vcenter_uuid (vcenter_uuid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin;
 
 CREATE TABLE host_sensor (
@@ -270,7 +274,8 @@ CREATE TABLE host_sensor (
   -- fan, power, system, temperature, voltage, other,
   -- Battery, Cable/Interconnect, Chassis, Management Subsystem Health,
   -- Memory, Processors, Software Components, Storage, System, Watchdog
-  PRIMARY KEY(host_uuid, name)
+  PRIMARY KEY(host_uuid, name),
+  INDEX vcenter_uuid (vcenter_uuid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin;
 
 CREATE TABLE host_physical_nic (
@@ -363,7 +368,7 @@ CREATE TABLE virtual_machine (
   uuid  VARBINARY(16) NOT NULL,
   vcenter_uuid VARBINARY(16) NOT NULL,
   hardware_memorymb INT UNSIGNED NULL DEFAULT NULL,
-  hardware_numcpu TINYINT UNSIGNED NULL DEFAULT NULL,
+  hardware_numcpu SMALLINT UNSIGNED NULL DEFAULT NULL,
   hardware_numcorespersocket TINYINT UNSIGNED NULL DEFAULT 1,
   template ENUM('y', 'n') NULL DEFAULT NULL, -- TODO: drop and skip templates? Or separate table?
   instance_uuid VARCHAR(64) DEFAULT NULL,   -- 5004890e-8edd-fe5f-d116-d5704b2043e4
@@ -420,7 +425,9 @@ CREATE TABLE virtual_machine (
   guest_ip_stack TEXT DEFAULT NULL,
   custom_values TEXT DEFAULT NULL,
   annotation TEXT DEFAULT NULL,
-  PRIMARY KEY(uuid)
+  PRIMARY KEY(uuid),
+  INDEX template (template),
+  INDEX vcenter_uuid (vcenter_uuid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin;
 
 CREATE TABLE vm_list (
@@ -498,7 +505,8 @@ CREATE TABLE datastore (
   --     'nfs',
   --     'cifs'
   -- ) NOT NULL,
-  PRIMARY KEY(uuid)
+  PRIMARY KEY(uuid),
+  INDEX vcenter_uuid (vcenter_uuid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin;
 
 CREATE TABLE vm_snapshot (
@@ -944,6 +952,39 @@ CREATE TABLE counter_300x5 (
   INDEX vcenter_uuid (vcenter_uuid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin;
 
+CREATE TABLE tagging_category (
+  uuid VARBINARY(16) NOT NULL,
+  vcenter_uuid VARBINARY(16) NOT NULL,
+  id VARCHAR(128) NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  cardinality ENUM('SINGLE', 'MULTIPLE') NOT NULL,
+  description TEXT NULL DEFAULT NULL,
+  associable_types TEXT NOT NULL, -- json-encoded array, like ["VirtualMachine"]
+  PRIMARY KEY (uuid),
+  INDEX vcenter_uuid (vcenter_uuid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin;
+
+CREATE TABLE tagging_tag (
+  uuid VARBINARY(16) NOT NULL,
+  category_uuid VARBINARY(16) NOT NULL,
+  vcenter_uuid VARBINARY(16) NOT NULL,
+  id VARCHAR(128) NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  description TEXT NULL DEFAULT NULL,
+  PRIMARY KEY (uuid),
+  INDEX tag_category (category_uuid),
+  INDEX vcenter_uuid (vcenter_uuid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin;
+
+CREATE TABLE tagging_object_tag (
+  object_uuid VARBINARY(16) NOT NULL,
+  tag_uuid VARBINARY(16) NOT NULL,
+  vcenter_uuid VARBINARY(16) NOT NULL,
+  PRIMARY KEY (object_uuid, tag_uuid),
+  INDEX search_by_tag (tag_uuid, object_uuid),
+  INDEX vcenter_uuid (vcenter_uuid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin;
+
 -- Not yet:
 -- CREATE TABLE vm_triggered_alarm (
 --   id BIGINT(20) UNSIGNED NOT NULL,
@@ -956,4 +997,4 @@ CREATE TABLE counter_300x5 (
 
 INSERT INTO vspheredb_schema_migration
   (schema_version, migration_time)
-VALUES (60, NOW());
+  VALUES (63, NOW());

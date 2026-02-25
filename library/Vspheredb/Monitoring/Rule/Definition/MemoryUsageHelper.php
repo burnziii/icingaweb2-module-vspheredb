@@ -15,9 +15,9 @@ class MemoryUsageHelper
 
     public static function prepareState(
         Settings $settings,
-        int      $free,
-        int      $capacity,
-        ?string  $instanceName = null
+        int $free,
+        int $capacity,
+        ?string $instanceName = null
     ): SingleCheckResult {
         $state = new State();
         if ($capacity === 0) {
@@ -30,9 +30,11 @@ class MemoryUsageHelper
 
         $percentFree = $free / $capacity * 100;
         $output = sprintf(
-            '%s out of %s (%.2F%%) free',
-            Format::bytes($free, Format::STANDARD_IEC),
+            '%s (%.2F%%) out of %s used, %s (%.2F%%) free',
+            Format::bytes($capacity - $free, Format::STANDARD_IEC),
+            100 - $percentFree,
             Format::bytes($capacity, Format::STANDARD_IEC),
+            Format::bytes($free, Format::STANDARD_IEC),
             $percentFree
         );
         if ($instanceName) {
@@ -61,7 +63,7 @@ class MemoryUsageHelper
         }
 
         if ($mbState->isProblem() && $percentState->isProblem()) {
-            if ($settings->get('threshold_precedence') === 'worst') {
+            if ($settings->get('threshold_precedence') === 'worst_wins') {
                 $state->raiseState(State::getWorst($percentState, $mbState));
             } else {
                 $state->raiseState(State::getBest($percentState, $mbState));

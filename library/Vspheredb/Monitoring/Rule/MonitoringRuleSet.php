@@ -8,8 +8,8 @@ use Icinga\Module\Vspheredb\Monitoring\Rule\Definition\MonitoringRuleSetDefiniti
 
 class MonitoringRuleSet
 {
-    const TABLE = 'monitoring_rule_set';
-    const NO_OBJECT = '';
+    public const TABLE = 'monitoring_rule_set';
+    public const NO_OBJECT = '';
 
     /** @var string */
     protected $binaryUuid;
@@ -30,7 +30,7 @@ class MonitoringRuleSet
 
     protected static $preloadCache = null;
 
-    public function __construct(string $binaryUuid, string $objectFolder, Settings $settings = null)
+    public function __construct(string $binaryUuid, string $objectFolder, ?Settings $settings = null)
     {
         $this->binaryUuid = $binaryUuid;
         if ($settings === null) {

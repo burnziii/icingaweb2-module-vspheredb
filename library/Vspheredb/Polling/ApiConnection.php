@@ -13,22 +13,22 @@ use Icinga\Module\Vspheredb\SafeCacheDir;
 use Psr\Log\LoggerInterface;
 use React\EventLoop\LoopInterface;
 use React\EventLoop\TimerInterface;
-use React\Promise\ExtendedPromiseInterface;
+use React\Promise\PromiseInterface;
 
 class ApiConnection implements EventEmitterInterface
 {
     use EventEmitterTrait;
     use StateMachine;
 
-    const ON_READY = 'ready';
-    const ON_ERROR = 'error';
+    public const ON_READY = 'ready';
+    public const ON_ERROR = 'error';
 
-    const STATE_STOPPED = 'stopped';
-    const STATE_STOPPING = 'stopping';
-    const STATE_INIT = 'initializing';
-    const STATE_LOGIN = 'login';
-    const STATE_CONNECTED = 'connected';
-    const STATE_FAILING = 'failing';
+    public const STATE_STOPPED = 'stopped';
+    public const STATE_STOPPING = 'stopping';
+    public const STATE_INIT = 'initializing';
+    public const STATE_LOGIN = 'login';
+    public const STATE_CONNECTED = 'connected';
+    public const STATE_FAILING = 'failing';
 
     /** @var CurlAsync */
     protected $curl;
@@ -51,10 +51,10 @@ class ApiConnection implements EventEmitterInterface
 
     protected $stopping;
 
-    /** @var ExtendedPromiseInterface */
+    /** @var PromiseInterface */
     protected $loginPromise;
 
-    /** @var ExtendedPromiseInterface */
+    /** @var PromiseInterface */
     protected $wsdlPromise;
 
     /** @var TimerInterface */
@@ -102,6 +102,7 @@ class ApiConnection implements EventEmitterInterface
             }
             $this->setState(self::STATE_STOPPED);
         });
+        // TODO: do we need failing -> stopping?
         $this->onTransition(self::STATE_CONNECTED, self::STATE_STOPPING, function () {
             $this->stopping = true;
             $this->logger->debug('Logging out');
@@ -138,7 +139,7 @@ class ApiConnection implements EventEmitterInterface
     protected function runSessionChecker()
     {
         $this->sessionChecker = $this->loop->addPeriodicTimer(150, function () {
-            $this->getApi()->eventuallyLogin()->otherwise(function (Exception $e) {
+            $this->getApi()->eventuallyLogin()->then(null, function (Exception $e) {
                 $this->logError('Login failed: ' . $e->getMessage());
                 $this->loop->futureTick(function () {
                     $this->setState(self::STATE_FAILING);
@@ -185,6 +186,7 @@ class ApiConnection implements EventEmitterInterface
     {
         $this->wsdlPromise = $this->fetchWsdl()
             ->then(function ($wsdlFile) {
+                // might be from cache
                 $this->wsdlFile = $wsdlFile;
                 $this->wsdlPromise = null;
                 $this->setState(self::STATE_LOGIN);

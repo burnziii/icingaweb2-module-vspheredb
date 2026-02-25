@@ -19,7 +19,7 @@ class IcingaCli
     /** @var LoopInterface */
     protected $loop;
 
-    public function __construct(IcingaCliRunner $runner = null)
+    public function __construct(?IcingaCliRunner $runner = null)
     {
         if ($runner === null) {
             $runner = IcingaCliRunner::forArgv();
@@ -58,7 +58,7 @@ class IcingaCli
         $process->on('exit', function ($exitCode, $termSignal) use ($deferred) {
             $state = new FinishedProcessState($exitCode, $termSignal);
             if ($state->succeeded()) {
-                $deferred->resolve();
+                $deferred->resolve(null);
             } else {
                 $deferred->reject(new \RuntimeException($state->getReason()));
             }

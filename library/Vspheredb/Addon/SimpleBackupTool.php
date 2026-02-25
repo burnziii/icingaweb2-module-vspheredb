@@ -8,7 +8,7 @@ use RuntimeException;
 
 abstract class SimpleBackupTool implements BackupTool
 {
-    const PREFIX = 'no-such-prefix';
+    public const PREFIX = 'no-such-prefix';
 
     protected $lastAttributes;
 
@@ -114,7 +114,7 @@ abstract class SimpleBackupTool implements BackupTool
             if (strpos($part, ': [') === false) {
                 continue;
             }
-            list($key, $value) = preg_split('/:\s\[/', $part, 2);
+            [$key, $value] = preg_split('/:\s\[/', $part, 2);
             $attributes[trim($key)] = $value;
         }
         if (array_key_exists('Time', $attributes)) {

@@ -10,11 +10,13 @@ use Icinga\Module\Vspheredb\Db;
 use Icinga\Module\Vspheredb\Db\BulkPathLookup;
 use Icinga\Module\Vspheredb\Db\DbUtil;
 use Icinga\Module\Vspheredb\Db\QueryHelper;
+use Icinga\Module\Vspheredb\Db\TagLookup;
 use Icinga\Module\Vspheredb\DbObject\VCenter;
 use Icinga\Module\Vspheredb\Web\Table\TableWithParentFilter;
 use Icinga\Module\Vspheredb\Web\Table\TableWithVCenterFilter;
 use Ramsey\Uuid\Uuid;
 use Zend_Db_Adapter_Abstract as ZfDb;
+
 use function array_keys;
 
 /**
@@ -38,7 +40,8 @@ class ImportSource extends ImportSourceHook implements TableWithVCenterFilter, T
         'hardware_cpu_cores'      => 'h.hardware_cpu_cores',
         'hardware_memory_size_mb' => 'h.hardware_memory_size_mb',
         'custom_values'           => 'h.custom_values',
-        'tags'                    => 'o.tags',
+        'tags'                    => '(NULL)',
+        'internal_tags'           => 'o.tags',
         'path'                    => '(NULL)',
     ];
 
@@ -53,14 +56,20 @@ class ImportSource extends ImportSourceHook implements TableWithVCenterFilter, T
         'hardware_memorymb'   => 'vm.hardware_memorymb',
         'guest_id'            => 'vm.guest_id',
         'bios_uuid'           => 'vm.bios_uuid',
+        'virtual_hardware_version' => 'vm.version', // vmx version, e.g vmx-19
         'guest_full_name'     => 'vm.guest_full_name',
         'guest_host_name'     => 'vm.guest_host_name',
         'runtime_power_state' => 'vm.runtime_power_state',
         'template'            => 'vm.template',
         'custom_values'       => 'vm.custom_values',
         'guest_ip_addresses'  => 'vm.guest_ip_addresses',
-        'tags'                => 'o.tags',
+        'annotation'          => 'vm.annotation',
+        // 'guest_ip_stack'      => 'vm.guest_ip_stack',
+        // 'runtime_host'        => 'rh.object_name',
+        'tags'                => '(NULL)',
+        'internal_tags'       => 'o.tags',
         'path'                => '(NULL)',
+        'resource_pool'       => 'rp.object_name',
     ];
 
     protected $computeResourceColumns = [
@@ -77,7 +86,8 @@ class ImportSource extends ImportSourceHook implements TableWithVCenterFilter, T
         'hosts'                    => 'cr.hosts',
         'total_cpu_mhz'            => 'cr.total_cpu_mhz',
         'total_memory_size_mb'     => 'cr.total_memory_size_mb',
-        'tags'                     => 'o.tags',
+        'tags'                     => '(NULL)',
+        'internal_tags'            => 'o.tags',
         'path'                     => '(NULL)',
     ];
 
@@ -89,7 +99,8 @@ class ImportSource extends ImportSourceHook implements TableWithVCenterFilter, T
         'maintenance_mode'     => 'ds.maintenance_mode',
         'capacity'             => 'ds.capacity',
         'multiple_host_access' => 'ds.multiple_host_access',
-        'tags'                 => 'o.tags',
+        'tags'                 => '(NULL)',
+        'internal_tags'        => 'o.tags',
         'path'                 => '(NULL)',
     ];
 
@@ -169,6 +180,7 @@ class ImportSource extends ImportSourceHook implements TableWithVCenterFilter, T
         $connection = Db::newConfiguredInstance();
         $db = $connection->getDbAdapter();
         $pathLookup = new BulkPathLookup($connection);
+        $tagLookup = new TagLookup($connection);
         $objectType = $this->getSetting('object_type');
         switch ($objectType) {
             case 'host_system':
@@ -198,6 +210,7 @@ class ImportSource extends ImportSourceHook implements TableWithVCenterFilter, T
 
         foreach ($result as $row) {
             $row->path = array_values($pathLookup->getParents($row->parent_uuid));
+            $row->tags = $tagLookup->getTags($row->uuid);
             unset($row->parent_uuid);
             static::convertDbRowToJsonData($row);
         }
@@ -225,18 +238,18 @@ class ImportSource extends ImportSourceHook implements TableWithVCenterFilter, T
             }
             $row->guest_ip_addresses = $addresses;
         }
-        if (isset($row->tags)) {
-            $row->tags = JsonString::decode($row->tags);
+        if (isset($row->internal_tags)) {
+            $row->internal_tags = JsonString::decode($row->internal_tags);
         }
     }
 
     protected function prepareVmQuery(ZfDb $db)
     {
-        $query = $db->select()->from(['o' => 'object'], $this->vmColumns)->join(
-            ['vm' => 'virtual_machine'],
-            'o.uuid = vm.uuid',
-            []
-        )->order('o.object_name')->order('o.uuid');
+        $query = $db->select()->from(['o' => 'object'], $this->vmColumns)
+            ->join(['vm' => 'virtual_machine'], 'o.uuid = vm.uuid', [])
+            ->joinLeft(['rp' => 'object'], 'vm.resource_pool_uuid = rp.uuid', [])
+            ->joinLeft(['rh' => 'object'], 'vm.runtime_host_uuid = rh.uuid', [])
+            ->order('o.object_name')->order('o.uuid');
         if ($this->getSetting('skip_templates', 'y') === 'y') {
             $query->where('template = ?', 'n');
         }
@@ -312,10 +325,10 @@ class ImportSource extends ImportSourceHook implements TableWithVCenterFilter, T
         $params = func_get_args();
         array_shift($params);
 
-        return call_user_func_array(array(
+        return call_user_func_array([
             $this->getManagedObjectClass(),
             $method
-        ), $params);
+        ], $params);
     }
 
     /**

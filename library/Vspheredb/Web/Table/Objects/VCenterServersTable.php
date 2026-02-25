@@ -16,9 +16,9 @@ use Psr\Http\Message\RequestInterface;
 
 class VCenterServersTable extends BaseTable implements EventEmitterInterface
 {
-    const ON_FORM_ACTION = 'formAction';
-
     use EventEmitterTrait;
+
+    public const ON_FORM_ACTION = 'formAction';
 
     protected $request;
 
@@ -79,15 +79,8 @@ class VCenterServersTable extends BaseTable implements EventEmitterInterface
                 'enabled'  => 'vcs.enabled',
                 'vcenter'  => 'vc.name',
             ]))->setRenderer(function ($row) {
-                $td = Html::tag('td', [
-                    'style' => 'width: 40%'
-                ]);
-
-                $td->add(Link::create(
-                    $this->makeUrl($row),
-                    'vspheredb/vcenter/server',
-                    ['id' => $row->id]
-                ));
+                $td = Html::tag('td', ['class' => 'column-server']);
+                $td->add(Link::create($this->makeUrl($row), 'vspheredb/vcenter/server', ['id' => $row->id]));
                 $td->add(Html::tag('br'));
                 $td->add($row->vcenter);
 
@@ -111,7 +104,7 @@ class VCenterServersTable extends BaseTable implements EventEmitterInterface
                 $form->handleRequest($this->request);
                 $form->ensureAssembled();
                 $td = Html::tag('td', [
-                    'style' => 'min-width: 10em; width: 20%; font-style: normal; text-align: right'
+                    'class' => 'column-enabled'
                 ], $form);
                 if ($this->serverConnections !== null) {
                     $td->add([' ', $this->getConnectionStatusIcon($row->id, $row->enabled === 'y'), ' ']);

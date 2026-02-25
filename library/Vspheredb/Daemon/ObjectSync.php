@@ -6,6 +6,7 @@ use Exception;
 use gipfl\SimpleDaemon\DaemonTask;
 use Icinga\Module\Vspheredb\DbObject\VCenter;
 use Icinga\Module\Vspheredb\MappedClass\CustomFieldsManager;
+use Icinga\Module\Vspheredb\Polling\RestApi;
 use Icinga\Module\Vspheredb\Polling\SyncStore\VmDatastoreUsageSyncStore;
 use Icinga\Module\Vspheredb\Polling\SyncTask\ComputeResourceSyncTask;
 use Icinga\Module\Vspheredb\Polling\SyncTask\DatastoreSyncTask;
@@ -17,9 +18,13 @@ use Icinga\Module\Vspheredb\Polling\SyncTask\HostSensorSyncTask;
 use Icinga\Module\Vspheredb\Polling\SyncTask\HostSystemSyncTask;
 use Icinga\Module\Vspheredb\Polling\SyncTask\HostVirtualNicSyncTask;
 use Icinga\Module\Vspheredb\Polling\SyncTask\ManagedObjectReferenceSyncTask;
+use Icinga\Module\Vspheredb\Polling\SyncTask\RestApiTask;
 use Icinga\Module\Vspheredb\Polling\SyncTask\StandaloneTask;
 use Icinga\Module\Vspheredb\Polling\SyncTask\StoragePodSyncTask;
 use Icinga\Module\Vspheredb\Polling\SyncTask\SyncTask;
+use Icinga\Module\Vspheredb\Polling\SyncTask\TaggingCategorySyncTask;
+use Icinga\Module\Vspheredb\Polling\SyncTask\TaggingObjectTagSyncTask;
+use Icinga\Module\Vspheredb\Polling\SyncTask\TaggingTagSyncTask;
 use Icinga\Module\Vspheredb\Polling\SyncTask\VirtualMachineSyncTask;
 use Icinga\Module\Vspheredb\Polling\SyncTask\VmDatastoreUsageSyncTask;
 use Icinga\Module\Vspheredb\Polling\SyncTask\VmDiskUsageSyncTask;
@@ -32,7 +37,9 @@ use Icinga\Module\Vspheredb\SyncRelated\SyncStats;
 use Psr\Log\LoggerInterface;
 use React\EventLoop\LoopInterface;
 use React\EventLoop\TimerInterface;
-use React\Promise\ExtendedPromiseInterface;
+use React\Promise\PromiseInterface;
+
+use function React\Promise\reject;
 use function React\Promise\resolve;
 
 class ObjectSync implements DaemonTask
@@ -75,10 +82,16 @@ class ObjectSync implements DaemonTask
         VmHardwareSyncTask::class,
     ];
 
+    protected $taggingTasks = [
+        TaggingTagSyncTask::class,
+        TaggingObjectTagSyncTask::class,
+        TaggingCategorySyncTask::class,
+    ];
+
     /** @var TimerInterface[]  */
     protected $timers = [];
 
-    /** @var ExtendedPromiseInterface[] */
+    /** @var PromiseInterface[] */
     protected $runningTasks = [];
 
     protected $ready = false;
@@ -86,13 +99,24 @@ class ObjectSync implements DaemonTask
     /** @var DbProcessRunner */
     protected $dbRunner;
 
-    public function __construct(VCenter $vCenter, VsphereApi $api, DbProcessRunner $dbRunner, LoggerInterface $logger)
-    {
+    /** @var RestApi */
+    protected $restApi;
+
+    protected $logTaskNames = false;
+
+    public function __construct(
+        VCenter $vCenter,
+        VsphereApi $api,
+        RestApi $restApi,
+        DbProcessRunner $dbRunner,
+        LoggerInterface $logger
+    ) {
         $this->vCenter = $vCenter;
         if ($vCenter->isHostAgent()) {
             $this->removeVCenterOnlyTasks();
         }
         $this->api = $api;
+        $this->restApi = $restApi;
         $this->logger = $logger;
         $this->dbRunner = $dbRunner;
     }
@@ -161,6 +185,11 @@ class ObjectSync implements DaemonTask
         $this->timers[] = $this->loop->addPeriodicTimer(2, function () {
             $this->runTasks([VmEventHistorySyncTask::class]);
         });
+        $this->timers[] = $this->loop->addPeriodicTimer(400, function () {
+            $this->restApi->requireSession()->then(function () {
+                $this->runTasks($this->taggingTasks);
+            });
+        });
     }
 
     protected function refreshOutdatedDatastores()
@@ -171,7 +200,9 @@ class ObjectSync implements DaemonTask
             $this->logger->notice("Task '$label' is already running, skipping");
             return;
         }
-        // $this->logger->debug("Running Task '$label'");
+        if ($this->logTaskNames) {
+            $this->logger->debug("Running Task '$label'");
+        }
 
         $maxCount = 30;
         $total = count(VmDatastoreUsageSyncStore::fetchOutdatedVms($this->vCenter, 3600 * 6));
@@ -180,7 +211,10 @@ class ObjectSync implements DaemonTask
         if ($count > 0) {
             $this->logger->debug("Refreshing  '$label': $count out of $total VMs with outdated storage information");
             $this->runningTasks[$idx] = VmDatastoreUsageSyncStore::refreshOutdatedVms($this->api, $vms, $this->logger)
-                ->then(function () use ($idx) {
+                ->then(function () use ($idx, $label) {
+                    if ($this->logTaskNames) {
+                        $this->logger->debug("Task done '$label'");
+                    }
                     unset($this->runningTasks[$idx]);
                 });
         }
@@ -189,13 +223,16 @@ class ObjectSync implements DaemonTask
     protected function runTasks(array $tasks)
     {
         foreach ($tasks as $task) {
-            $this->runTask(new $task);
+            $this->runTask(new $task());
         }
     }
 
     protected function runAllTasks()
     {
         $this->runTasks(array_merge($this->fastTasks, $this->normalTasks, $this->slowTasks));
+        $this->restApi->requireSession()->then(function () {
+            $this->runTasks($this->taggingTasks);
+        });
     }
 
     protected function runTask(SyncTask $task)
@@ -206,10 +243,14 @@ class ObjectSync implements DaemonTask
             $this->logger->notice("Task '$label' is already running, skipping");
             return;
         }
-        // $this->logger->debug("Running Task '$label'");
+        if ($this->logTaskNames) {
+            $this->logger->debug("Running Task '$label'");
+        }
 
         if ($task instanceof StandaloneTask) {
             $instance = $task->run($this->api, $this->logger);
+        } elseif ($task instanceof RestApiTask) {
+            $instance = $task->run($this->restApi);
         } else {
             $instance = $this->api->fetchBySelectAndPropertySetClass(
                 $task->getSelectSetClass(),
@@ -217,7 +258,7 @@ class ObjectSync implements DaemonTask
             );
         }
 
-        $this->runningTasks[$idx] = $instance->then(function ($result) use ($task, $idx) {
+        $this->runningTasks[$idx] = $instance->then(function ($result) use ($task, $idx, $label) {
             if (! $this->ready) {
                 $this->logger->warning(sprintf(
                     "Not storing result for '%s', task has been stopped",
@@ -226,6 +267,7 @@ class ObjectSync implements DaemonTask
                 unset($this->runningTasks[$idx]);
                 return resolve();
             }
+            $task->tweakResult($result);
 
             return $this->dbRunner->request('db.processSyncTaskResult', [
                 'vCenterId'   => (int) $this->vCenter->get('id'),
@@ -233,18 +275,23 @@ class ObjectSync implements DaemonTask
                 'taskLabel'   => $task->getLabel(),
                 'storeClass'  => $task->getSyncStoreClass(),
                 'objectClass' => $task->getObjectClass(),
-            ])->then(function ($stats) use ($idx) {
+            ])->then(function ($stats) use ($idx, $label) {
                 $stats = SyncStats::fromSerialization($stats);
                 if ($stats->hasChanges()) {
                     $this->logger->info($stats->getLogMessage());
                 }
 
                 unset($this->runningTasks[$idx]);
+                if ($this->logTaskNames) {
+                    $this->logger->debug("Task done '$label'");
+                }
                 return resolve();
             }, function (Exception $e) use ($idx) {
                 unset($this->runningTasks[$idx]);
-                $this->logger->error($e->getMessage());
-            })->done();
+                $this->logger->error('Failed to process Task result: ' . $e->getMessage());
+
+                return reject($e);
+            });
         }, function (Exception $e) use ($idx, $label) {
             $this->logger->error("$label: " . $e->getMessage());
             unset($this->runningTasks[$idx]);
@@ -267,7 +314,7 @@ class ObjectSync implements DaemonTask
      */
     protected function prepareSyncResultHandler()
     {
-        return $this->api->fetchCustomFieldsManager()->then(function (CustomFieldsManager $manager = null) {
+        return $this->api->fetchCustomFieldsManager()->then(function (?CustomFieldsManager $manager = null) {
             if ($manager === null) {
                 return resolve();
             }

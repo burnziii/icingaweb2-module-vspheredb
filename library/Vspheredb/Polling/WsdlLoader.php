@@ -8,9 +8,10 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerInterface;
 use React\EventLoop\LoopInterface;
 use React\Promise\Deferred;
-use React\Promise\ExtendedPromiseInterface;
+use React\Promise\PromiseInterface;
 use SoapClient;
 use SoapFault;
+
 use function file_exists;
 use function file_put_contents;
 use function React\Promise\reject;
@@ -52,7 +53,7 @@ class WsdlLoader
 
     protected $baseUrl;
 
-    /** @var ExtendedPromiseInterface[] */
+    /** @var PromiseInterface[] */
     protected $pending = [];
 
     /** @var ?Deferred */
@@ -151,7 +152,7 @@ class WsdlLoader
                     ->get($this->url($file), [], CurlOptions::forServerInfo($this->serverInfo))
                     ->then(function (ResponseInterface $response) use ($file) {
                         $status = $response->getStatusCode();
-                        if ($status > 199 && $status<= 299) {
+                        if ($status > 199 && $status <= 299) {
                             $this->processFileResult($response, $file);
                         } else {
                             $this->processFileFailure(new Exception($response->getReasonPhrase()), $file);
@@ -175,7 +176,7 @@ class WsdlLoader
             $this->loop->futureTick(function () use ($deferred) {
                 try {
                     new SoapClient($this->getInitialFilename());
-                    $deferred->resolve();
+                    $deferred->resolve(null);
                 } catch (SoapFault $e) {
                     $this->flushWsdlCache();
                     $deferred->reject($e);

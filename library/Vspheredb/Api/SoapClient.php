@@ -3,14 +3,18 @@
 namespace Icinga\Module\Vspheredb\Api;
 
 use gipfl\Curl\CurlAsync;
+use gipfl\Json\JsonEncodeException;
+use gipfl\Json\JsonString;
 use Icinga\Module\Vspheredb\Api\Protocol\ClientDecoder;
 use Icinga\Module\Vspheredb\Api\Protocol\ClientEncoder;
+use Icinga\Module\Vspheredb\MappedClass\Fault;
 use Icinga\Module\Vspheredb\Polling\CookieStore;
+use InvalidArgumentException;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
-use React\Promise\ExtendedPromiseInterface;
+use React\Promise\PromiseInterface;
 use SoapFault;
 
 /**
@@ -42,7 +46,7 @@ class SoapClient
         $wsdl,
         array $options = [],
         $curlOptions = [],
-        LoggerInterface $logger = null
+        ?LoggerInterface $logger = null
     ) {
         $this->curl = $curl;
         $this->encoder = new ClientEncoder($wsdl, $options);
@@ -59,9 +63,9 @@ class SoapClient
     /**
      * @param string $method
      * @param mixed[] $args
-     * @return ExtendedPromiseInterface
+     * @return PromiseInterface<ResponseInterface>
      */
-    public function call($method, $args)
+    public function call($method, $args): PromiseInterface
     {
         $request = $this->addCookiesToRequest(
             $this->encoder->encode($method, $args),
@@ -83,11 +87,29 @@ class SoapClient
                                 $e->getMessage() . ': ' . $this->getBodyPart($response)
                             );
                         }
+                        if (isset($e->detail)) {
+                            // detail: { InvalidPropertyFault: { (SoapVar)
+                            //    enc_type: 0
+                            //    enc_value: InvalidProperty { (MappedClass)
+                            //        name: "config.hardware.device.thinProvisioned"
+                            if (isset($e->detail->InvalidPropertyFault->enc_value)) {
+                                $envValue = $e->detail->InvalidPropertyFault->enc_value;
+                                if ($envValue instanceof Fault) {
+                                    throw new InvalidArgumentException($envValue->getMessage());
+                                }
+                            }
+
+                            // Hint: unfinished, this also triggers
+                            try {
+                                $this->logger->error('Unhandled SoapFault: ' . JsonString::encode($e->detail));
+                            } catch (JsonEncodeException $e) {
+                            }
+                        }
                         throw $e;
                     }
                     $status = $response->getStatusCode();
 
-                    if ($status > 199 && $status<= 299) {
+                    if ($status > 199 && $status <= 299) {
                         throw new \Exception($response->getReasonPhrase());
                     }
 
@@ -102,7 +124,7 @@ class SoapClient
 
     protected function getBodyPart(ResponseInterface $response)
     {
-        return str_replace(["\r", "\n"], ['\\r', '\\n'], substr($response->getBody(), 0, 500));
+        return str_replace(["\r", "\n"], ['\\r', '\\n'], substr($response->getBody(), 0, 800));
     }
 
     protected function addCookiesToRequest(RequestInterface $request, $soapFunctionName)

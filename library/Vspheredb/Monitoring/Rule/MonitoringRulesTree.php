@@ -10,7 +10,7 @@ class MonitoringRulesTree
 {
     use TranslationHelper;
 
-    const ROOT_OBJECT_TYPE = 'root';
+    public const ROOT_OBJECT_TYPE = 'root';
 
     /** @var Db */
     protected $db;
@@ -85,11 +85,13 @@ class MonitoringRulesTree
         return isset($this->configList[$uuid]);
     }
 
+    /**
+     * @throws \Icinga\Exception\NotFoundError
+     */
     public function getInheritedSettingsFor(BaseDbObject $object): InheritedSettings
     {
         $uuid = $object->object()->get('parent_uuid');
-        $parents = $this->listParentUuidsFor($uuid);
-        $parents[] = $uuid;
+        $parents = [$uuid, ...$this->listParentUuidsFor($uuid)];
 
         return InheritedSettings::loadForUuids($parents, $this, $this->db);
     }

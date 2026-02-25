@@ -13,7 +13,7 @@ class ObjectSyncStore extends SyncStore
 {
     use SyncHelper;
 
-    const CUSTOM_VALUE_KEY = 'summary.customValue';
+    public const CUSTOM_VALUE_KEY = 'summary.customValue';
 
     /** @var ?array */
     protected $customFieldsMap;
@@ -22,7 +22,7 @@ class ObjectSyncStore extends SyncStore
         $db,
         VCenter $vCenter,
         LoggerInterface $logger,
-        array $customFieldsMap = null
+        ?array $customFieldsMap = null
     ) {
         $this->customFieldsMap = $customFieldsMap;
         parent::__construct($db, $vCenter, $logger);

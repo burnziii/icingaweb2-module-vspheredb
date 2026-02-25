@@ -4,17 +4,14 @@
 Requirements
 ------------
 
-* Icinga Web 2 (&gt;= 2.8)
-* PHP (&gt;= 7.1 or 8.x - 64bit only)
+* Icinga Web 2 (&gt;= 2.10)
+* PHP (&gt;= 7.4 or 8.x - 64bit only)
 * php-soap
 * php-pcntl (might already be built into your PHP binary)
 * php-posix (on RHEL/CentOS this is php-process, or rh-php7x-php-process)
 * MySQL (&gt;= 5.7) or MariaDB (&gt;= 10.3)
 * The following Icinga modules must be installed and enabled:
-  * [incubator](https://github.com/Icinga/icingaweb2-module-incubator) (>=0.20)
-  * If you are using Icinga Web &lt; 2.9.0, the following modules are also required
-    * [ipl](https://github.com/Icinga/icingaweb2-module-ipl) (>=0.5.0)
-    * [reactbundle](https://github.com/Icinga/icingaweb2-module-reactbundle) (>=0.8.0)
+  * [incubator](https://github.com/Icinga/icingaweb2-module-incubator) (>=0.23)
 
 Once you got Icinga Web 2 up and running, all required dependencies should
 already be there. All, but `php-soap` and `php-posix`. They are available on
@@ -44,6 +41,15 @@ Please make sure that you choose `utf8mb4` as an encoding.
 Installation
 ------------
 
+### SELinux notice
+
+When installing the module on a system with SELinux enabled,
+execute the following command to assign the appropriate context to the module's daemon socket directory:
+
+```shell
+semanage fcontext -a -t icingaweb2_rw_content_t '/run/icinga-vspheredb(/.*)?'
+```
+
 ### Module installation (or upgrade)
 
 This script downloads the [latest version](https://github.com/Icinga/icingaweb2-module-vspheredb/releases)
@@ -52,7 +58,7 @@ existing module installation will be replaced, so this can be used for upgrades 
 
 ```shell
 # You can customize these settings, but we suggest to stick with our defaults:
-MODULE_VERSION="1.7.1"
+MODULE_VERSION="1.8.0"
 DAEMON_USER="icingavspheredb"
 DAEMON_GROUP="icingaweb2"
 ICINGAWEB_MODULEPATH="/usr/share/icingaweb2/modules"
@@ -106,6 +112,11 @@ That's it!
 
 FAQ
 ---
+
+### Which permissions are required for the VMware user?
+
+We usually need `System.Anonymous`, `System.Read` and `System.View`. The default
+`Read-only` role already includes them.
 
 ### Running without SystemD
 

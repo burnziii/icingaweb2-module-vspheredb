@@ -17,9 +17,9 @@ class DbLogger implements LogWriterWithContext, EventEmitterInterface
     use EventEmitterTrait;
     use LoggerAwareTrait;
 
-    const ERROR_PREFIX = 'DbLogger failed: ';
+    public const ERROR_PREFIX = 'DbLogger failed: ';
 
-    const ERROR_PREFIX_LENGTH = 17;
+    public const ERROR_PREFIX_LENGTH = 17;
 
     protected $instance;
 
@@ -41,7 +41,7 @@ class DbLogger implements LogWriterWithContext, EventEmitterInterface
         $this->queue = new SplStack();
     }
 
-    public function setDb(Db $db = null)
+    public function setDb(?Db $db = null)
     {
         if ($db === null) {
             $this->db = null;

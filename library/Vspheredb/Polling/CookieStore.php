@@ -3,6 +3,7 @@
 namespace Icinga\Module\Vspheredb\Polling;
 
 use Psr\Log\LoggerInterface;
+
 use function file;
 use function file_exists;
 use function file_put_contents;
@@ -29,7 +30,7 @@ class CookieStore
         $this->logger = $logger;
         $this->cookieFile = $this->cacheDir . "/cookie-" . $serverInfo->get('id');
         if (file_exists($this->cookieFile)) {
-            $this->cookies = file($this->cookieFile);
+            $this->cookies = file($this->cookieFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         }
     }
 
@@ -63,6 +64,10 @@ class CookieStore
 
     public function getCookies()
     {
+        if (file_exists($this->cookieFile . '.fake')) {
+            return file($this->cookieFile . '.fake', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        }
+
         return $this->cookies;
     }
 }
